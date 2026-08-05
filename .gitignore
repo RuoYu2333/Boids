@@ -1,0 +1,54 @@
+# Unreal Engine generated directories
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+
+# IDE and generated project files
+**/.vs/
+**/.vscode/
+**/.idea/
+*.VC.db
+*.VC.opendb
+*.sdf
+*.sln
+*.suo
+*.opensdf
+*.opendb
+*.user
+*.userprefs
+*.code-workspace
+
+# Build products and debug files
+*.dll
+*.exe
+*.exp
+*.lib
+*.pdb
+*.ipch
+*.obj
+!ThirdParty/**/*.obj
+*.iobj
+*.ipdb
+
+# Unreal local caches and packaged output
+**/Build/Receipts/
+**/Build/Windows/FileOpenOrder/
+**/LocalBuilds/
+**/Releases/
+**/StagedBuilds/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.temp
+*.log
+
+# Codex local provider synchronization artifacts
+.codex-provider-sync-temp/
+codex-provider-sync-main.zip
+
+# Local one-off download runtime
+.codex-download-tools/

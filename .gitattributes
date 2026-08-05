@@ -1,0 +1,24 @@
+* text=auto
+
+*.h text eol=crlf
+*.hpp text eol=crlf
+*.cpp text eol=crlf
+*.cs text eol=crlf
+*.ini text eol=crlf
+*.uproject text eol=lf
+*.uplugin text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+*.uasset binary
+*.umap binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.fbx binary
+
