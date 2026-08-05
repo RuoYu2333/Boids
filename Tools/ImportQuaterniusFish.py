@@ -22,7 +22,6 @@ def import_fish(name):
     options.import_as_skeletal = False
     options.import_materials = True
     options.import_textures = True
-    options.static_mesh_import_data.import_uniform_scale = 25.0
     options.static_mesh_import_data.combine_meshes = True
     options.static_mesh_import_data.generate_lightmap_u_vs = False
     task.options = options

@@ -552,7 +552,16 @@ MaxTurnAngle = MaxTurnRateDegrees × FixedDeltaTime
 - 原始文件归档：`ThirdParty/QuaterniusAnimatedFish/`。
 - UE 资源路径：`/Game/Fish/Quaternius/`。
 
-当前五个种群依次使用 `Fish1`、`Fish2`、`Fish3`、`Manta_ray` 和 `Shark`。导入脚本位于 `Tools/ImportQuaterniusFish.py`，将 OBJ 统一放大 25 倍并生成静态网格。五种网格仍由五个 ISM 组件批量绘制，因此没有给单条鱼增加 Actor、组件或 Tick。
+当前五个种群依次使用 `Fish1`、`Fish2`、`Fish3`、`Manta_ray` 和 `Shark`。导入脚本位于 `Tools/ImportQuaterniusFish.py`。五种网格仍由五个 ISM 组件批量绘制，因此没有给单条鱼增加 Actor、组件或 Tick。
+
+UE 的 OBJ 导入器不会可靠采用 `FbxImportUI.import_uniform_scale`；实测这五个网格的包围球半径只有约 4–8 cm。Manager 在 `BeginPlay` 读取每种 Static Mesh 的真实包围球半径，并缓存显示倍率：
+
+```text
+MeshScaleMultiplier = FishDisplayRadius / SourceMeshSphereRadius
+InstanceScale        = Agent.Scale * MeshScaleMultiplier
+```
+
+默认 `FishDisplayRadius=50`，与原球体代理使用的 `50 × Agent.Scale` 碰撞半径一致。该归一化基于资源实际尺寸，不依赖水箱高度、相机距离或某一组硬编码导入倍率；以后替换网格也会自动适配。
 
 Quaternius 模型的鱼头朝本地 +Z。每次实例更新时使用四元数把本地 +Z 对齐到代理速度方向：
 

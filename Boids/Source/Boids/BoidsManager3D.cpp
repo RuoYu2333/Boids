@@ -38,14 +38,14 @@ FTransform MakeDirectionIndicatorTransform3D(
 		FVector(SafeWidth / 100.0f, SafeWidth / 100.0f, SafeLength / 100.0f));
 }
 
-FTransform MakeFishTransform3D(const FBoidAgent3D& Agent)
+FTransform MakeFishTransform3D(const FBoidAgent3D& Agent, float MeshScaleMultiplier)
 {
 	const FVector Direction = Agent.Velocity.GetSafeNormal();
 	// Quaternius 这组 OBJ 的鱼头朝本地 +Z；把该轴旋转到速度方向，鱼身就会沿轨迹前进。
 	const FQuat Rotation = Direction.IsNearlyZero()
 		? FQuat::Identity
 		: FQuat::FindBetweenNormals(FVector::UpVector, Direction);
-	return FTransform(Rotation, Agent.Position, FVector(Agent.Scale));
+	return FTransform(Rotation, Agent.Position, FVector(Agent.Scale * MeshScaleMultiplier));
 }
 }
 
@@ -137,6 +137,7 @@ ABoidsManager3D::ABoidsManager3D()
 void ABoidsManager3D::BeginPlay()
 {
 	Super::BeginPlay();
+	RefreshFishMeshScaleMultipliers();
 
 	if (UMaterialInstanceDynamic* Material = BlueInstances->CreateAndSetMaterialInstanceDynamic(0))
 	{
@@ -307,7 +308,10 @@ void ABoidsManager3D::SpawnAgents()
 
 		UInstancedStaticMeshComponent* TargetInstances = GetInstancesForGroup(GroupId);
 		const int32 InstanceIndex = TargetInstances->AddInstance(
-			FTransform(FQuat::FindBetweenNormals(FVector::UpVector, Velocity.GetSafeNormal()), Position, FVector(Scale)));
+			FTransform(
+				FQuat::FindBetweenNormals(FVector::UpVector, Velocity.GetSafeNormal()),
+				Position,
+				FVector(Scale * GetFishMeshScaleMultiplier(GroupId))));
 
 		FBoidAgent3D& Agent = Agents.AddDefaulted_GetRef();
 		Agent.Position = Position;
@@ -845,7 +849,7 @@ void ABoidsManager3D::UpdateInstances()
 		UInstancedStaticMeshComponent* TargetInstances = GetInstancesForGroup(Agent.GroupId);
 		TargetInstances->UpdateInstanceTransform(
 			Agent.InstanceIndex,
-			MakeFishTransform3D(Agent),
+			MakeFishTransform3D(Agent, GetFishMeshScaleMultiplier(Agent.GroupId)),
 			false,
 			false,
 			true);
@@ -882,6 +886,27 @@ UInstancedStaticMeshComponent* ABoidsManager3D::GetInstancesForGroup(int32 Group
 	case 3: return PurpleInstances;
 	default: return WhiteInstances;
 	}
+}
+
+void ABoidsManager3D::RefreshFishMeshScaleMultipliers()
+{
+	FishMeshScaleMultipliers.SetNum(5);
+	for (int32 GroupId = 0; GroupId < FishMeshScaleMultipliers.Num(); ++GroupId)
+	{
+		const UInstancedStaticMeshComponent* Component = GetInstancesForGroup(GroupId);
+		const UStaticMesh* Mesh = Component != nullptr ? Component->GetStaticMesh() : nullptr;
+		const float SourceRadius = Mesh != nullptr ? Mesh->GetBounds().SphereRadius : 0.0f;
+		FishMeshScaleMultipliers[GroupId] = SourceRadius > UE_SMALL_NUMBER
+			? FMath::Max(1.0f, FishDisplayRadius) / SourceRadius
+			: 1.0f;
+	}
+}
+
+float ABoidsManager3D::GetFishMeshScaleMultiplier(int32 GroupId) const
+{
+	return FishMeshScaleMultipliers.IsValidIndex(GroupId)
+		? FishMeshScaleMultipliers[GroupId]
+		: 1.0f;
 }
 
 void ABoidsManager3D::RebuildBoundaryFrame()

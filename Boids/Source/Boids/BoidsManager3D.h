@@ -240,6 +240,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Debug", meta = (ClampMin = "1.0"))
 	float BoundaryFrameThickness = 10.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Rendering", meta = (ClampMin = "1.0"))
+	float FishDisplayRadius = 50.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Debug")
 	bool bShowNeighborhoodDebug = false;
 
@@ -277,6 +280,7 @@ private:
 	TArray<FBoidAgent3D> Agents;
 	TMap<FIntVector, TArray<int32>> SpatialGrid;
 	TArray<FBoidsFood3D> Foods;
+	TArray<float> FishMeshScaleMultipliers;
 	float TimeAccumulator = 0.0f;
 	float SimulationTime = 0.0f;
 	int32 FoodDropSequence = 0;
@@ -294,6 +298,8 @@ private:
 	void SpawnFreeCamera();
 	void ResolveAgentCollisions();
 	UInstancedStaticMeshComponent* GetInstancesForGroup(int32 GroupId) const;
+	void RefreshFishMeshScaleMultipliers();
+	float GetFishMeshScaleMultiplier(int32 GroupId) const;
 	FVector GetTankCenterLocal() const;
 	float GetSizeSpeedMultiplier(float Scale) const;
 	float GetSizeAccelerationMultiplier(float Scale) const;
