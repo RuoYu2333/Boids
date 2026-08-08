@@ -51,4 +51,5 @@ private:
 	void LookYaw(float Value);
 	void LookPitch(float Value);
 	void DropFood();
+	void StartPerformanceBenchmark();
 };

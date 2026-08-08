@@ -40,6 +40,7 @@ void ABoidsFreeCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	PlayerInputComponent->BindAxisKey(EKeys::MouseX, this, &ABoidsFreeCameraPawn::LookYaw);
 	PlayerInputComponent->BindAxisKey(EKeys::MouseY, this, &ABoidsFreeCameraPawn::LookPitch);
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &ABoidsFreeCameraPawn::DropFood);
+	PlayerInputComponent->BindKey(EKeys::B, IE_Pressed, this, &ABoidsFreeCameraPawn::StartPerformanceBenchmark);
 }
 
 void ABoidsFreeCameraPawn::Tick(float DeltaTime)
@@ -78,6 +79,15 @@ void ABoidsFreeCameraPawn::DropFood()
 	for (TActorIterator<ABoidsManager3D> It(GetWorld()); It; ++It)
 	{
 		It->StartFeedingAtWorldLocation(FVector::ZeroVector);
+		break;
+	}
+}
+
+void ABoidsFreeCameraPawn::StartPerformanceBenchmark()
+{
+	for (TActorIterator<ABoidsManager3D> It(GetWorld()); It; ++It)
+	{
+		It->StartVisualPerformanceBenchmark();
 		break;
 	}
 }

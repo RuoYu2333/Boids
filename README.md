@@ -51,6 +51,7 @@ Engine\Build\BatchFiles\Build.bat BoidsEditor Win64 Development -Project="<仓�
 | `左 Shift` | 加速移动 |
 | 按住鼠标右键并移动 | 自由观察 |
 | `F` | 从水箱顶部随机投放一个食物 |
+| `B` | 在当前关卡运行 1/2/4 档 Boids 性能对比 |
 
 ## 技术结构
 

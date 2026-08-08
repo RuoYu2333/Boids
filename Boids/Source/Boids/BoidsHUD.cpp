@@ -2,8 +2,11 @@
 
 #include "BoidsHUD.h"
 
+#include "BoidsManager3D.h"
+
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 
 void ABoidsHUD::DrawHUD()
 {
@@ -19,4 +22,18 @@ void ABoidsHUD::DrawHUD()
 	Canvas->StrLen(Font, TimerText, TextWidth, TextHeight);
 	Canvas->SetDrawColor(FColor::White);
 	Canvas->DrawText(Font, TimerText, Canvas->SizeX - TextWidth - 30.0f, 25.0f, 1.0f, 1.0f, FFontRenderInfo());
+
+	for (TActorIterator<ABoidsManager3D> It(GetWorld()); It; ++It)
+	{
+		TArray<FString> PerformanceLines;
+		It->GetPerformanceOverlayLines(PerformanceLines);
+		float Y = 25.0f;
+		for (int32 LineIndex = 0; LineIndex < PerformanceLines.Num(); ++LineIndex)
+		{
+			Canvas->SetDrawColor(LineIndex == 0 ? FColor(100, 220, 255) : FColor::White);
+			Canvas->DrawText(Font, PerformanceLines[LineIndex], 30.0f, Y, 0.85f, 0.85f, FFontRenderInfo());
+			Y += 24.0f;
+		}
+		break;
+	}
 }

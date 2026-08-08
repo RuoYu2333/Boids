@@ -57,6 +57,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boids3D|Feeding")
 	void StopFeeding();
 
+	UFUNCTION(BlueprintCallable, Category = "Boids3D|Performance")
+	void StartVisualPerformanceBenchmark();
+
+	void GetPerformanceOverlayLines(TArray<FString>& OutLines) const;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Boids3D|Behavior")
 	EBoids3DBehaviorMode CurrentBehavior = EBoids3DBehaviorMode::Cruising;
 
@@ -224,6 +229,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Simulation", meta = (ClampMin = "1", ClampMax = "8"))
 	int32 ForceUpdateInterval = 2;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Performance", meta = (ClampMin = "1"))
+	int32 VisualBenchmarkWarmupSteps = 120;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Performance", meta = (ClampMin = "60"))
+	int32 VisualBenchmarkMeasureSteps = 600;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Rendering", meta = (ClampMin = "0"))
 	int32 InstanceStartCullDistance = 0;
 
@@ -289,11 +300,21 @@ private:
 	float TimeAccumulator = 0.0f;
 	float SimulationTime = 0.0f;
 	uint64 ForceEvaluationStep = 0;
+	double LiveAverageStepMilliseconds = 0.0;
+	double VisualBenchmarkResults[3] = {-1.0, -1.0, -1.0};
+	double VisualBenchmarkAccumulatedMilliseconds = 0.0;
+	int32 VisualBenchmarkModeIndex = INDEX_NONE;
+	int32 VisualBenchmarkPhaseSteps = 0;
+	int32 VisualBenchmarkOriginalInterval = 2;
+	bool bVisualBenchmarkActive = false;
+	bool bVisualBenchmarkWarmingUp = false;
 	int32 FoodDropSequence = 0;
 	TWeakObjectPtr<ABoidsFreeCameraPawn> SpawnedFreeCamera;
 
 	void SpawnAgents();
 	void RunCommandLineBenchmark(int32 BenchmarkSteps, int32 WarmupSteps);
+	void BeginVisualBenchmarkMode(int32 ModeIndex);
+	void RecordVisualBenchmarkStep(double StepMilliseconds);
 	void StepSimulation(float FixedDeltaTime);
 	void BuildSpatialHash(float CellSize);
 	FIntVector GetCellCoordinate(const FVector& Position, float CellSize) const;

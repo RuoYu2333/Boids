@@ -236,7 +236,13 @@ void ABoidsManager3D::Tick(float DeltaTime)
 	int32 CompletedSubsteps = 0;
 	while (TimeAccumulator >= SafeSimulationStep && CompletedSubsteps < SafeMaxSubsteps)
 	{
+		const double StepStartSeconds = FPlatformTime::Seconds();
 		StepSimulation(SafeSimulationStep);
+		const double StepMilliseconds = (FPlatformTime::Seconds() - StepStartSeconds) * 1000.0;
+		LiveAverageStepMilliseconds = LiveAverageStepMilliseconds <= 0.0
+			? StepMilliseconds
+			: FMath::Lerp(LiveAverageStepMilliseconds, StepMilliseconds, 0.05);
+		RecordVisualBenchmarkStep(StepMilliseconds);
 		TimeAccumulator -= SafeSimulationStep;
 		++CompletedSubsteps;
 	}
@@ -245,6 +251,121 @@ void ABoidsManager3D::Tick(float DeltaTime)
 	if (TimeAccumulator >= SafeSimulationStep)
 	{
 		TimeAccumulator = FMath::Fmod(TimeAccumulator, SafeSimulationStep);
+	}
+}
+
+void ABoidsManager3D::StartVisualPerformanceBenchmark()
+{
+	if (bVisualBenchmarkActive)
+	{
+		return;
+	}
+
+	VisualBenchmarkOriginalInterval = FMath::Clamp(ForceUpdateInterval, 1, 8);
+	for (double& Result : VisualBenchmarkResults)
+	{
+		Result = -1.0;
+	}
+	bVisualBenchmarkActive = true;
+	BeginVisualBenchmarkMode(0);
+}
+
+void ABoidsManager3D::BeginVisualBenchmarkMode(int32 ModeIndex)
+{
+	static constexpr int32 TestIntervals[3] = {1, 2, 4};
+	VisualBenchmarkModeIndex = FMath::Clamp(ModeIndex, 0, 2);
+	ForceUpdateInterval = TestIntervals[VisualBenchmarkModeIndex];
+	VisualBenchmarkPhaseSteps = 0;
+	VisualBenchmarkAccumulatedMilliseconds = 0.0;
+	bVisualBenchmarkWarmingUp = true;
+	SimulationTime = 0.0f;
+	ForceEvaluationStep = 0;
+	CurrentBehavior = EBoids3DBehaviorMode::Cruising;
+	FoodDropSequence = 0;
+	for (FBoidsFood3D& Food : Foods)
+	{
+		Food.bActive = false;
+	}
+	SpawnAgents();
+}
+
+void ABoidsManager3D::RecordVisualBenchmarkStep(double StepMilliseconds)
+{
+	if (!bVisualBenchmarkActive)
+	{
+		return;
+	}
+
+	++VisualBenchmarkPhaseSteps;
+	if (bVisualBenchmarkWarmingUp)
+	{
+		if (VisualBenchmarkPhaseSteps >= FMath::Max(1, VisualBenchmarkWarmupSteps))
+		{
+			bVisualBenchmarkWarmingUp = false;
+			VisualBenchmarkPhaseSteps = 0;
+			VisualBenchmarkAccumulatedMilliseconds = 0.0;
+		}
+		return;
+	}
+
+	VisualBenchmarkAccumulatedMilliseconds += StepMilliseconds;
+	const int32 SafeMeasureSteps = FMath::Max(60, VisualBenchmarkMeasureSteps);
+	if (VisualBenchmarkPhaseSteps < SafeMeasureSteps)
+	{
+		return;
+	}
+
+	VisualBenchmarkResults[VisualBenchmarkModeIndex] =
+		VisualBenchmarkAccumulatedMilliseconds / static_cast<double>(VisualBenchmarkPhaseSteps);
+	if (VisualBenchmarkModeIndex < 2)
+	{
+		BeginVisualBenchmarkMode(VisualBenchmarkModeIndex + 1);
+	}
+	else
+	{
+		bVisualBenchmarkActive = false;
+		bVisualBenchmarkWarmingUp = false;
+		ForceUpdateInterval = VisualBenchmarkOriginalInterval;
+		VisualBenchmarkModeIndex = INDEX_NONE;
+	}
+}
+
+void ABoidsManager3D::GetPerformanceOverlayLines(TArray<FString>& OutLines) const
+{
+	OutLines.Reset();
+	OutLines.Add(TEXT("[B] Run Boids A/B Benchmark"));
+	OutLines.Add(FString::Printf(TEXT("Live: %.4f ms/step  |  Force interval: %d  |  Fish: %d"),
+		LiveAverageStepMilliseconds, FMath::Clamp(ForceUpdateInterval, 1, 8), Agents.Num()));
+
+	if (bVisualBenchmarkActive)
+	{
+		static constexpr int32 TestIntervals[3] = {1, 2, 4};
+		const int32 TargetSteps = bVisualBenchmarkWarmingUp
+			? FMath::Max(1, VisualBenchmarkWarmupSteps)
+			: FMath::Max(60, VisualBenchmarkMeasureSteps);
+		const float Progress = 100.0f * static_cast<float>(VisualBenchmarkPhaseSteps)
+			/ static_cast<float>(TargetSteps);
+		OutLines.Add(FString::Printf(TEXT("Testing force interval: %d  |  %s  |  %.0f%%"),
+			TestIntervals[FMath::Clamp(VisualBenchmarkModeIndex, 0, 2)],
+			bVisualBenchmarkWarmingUp ? TEXT("Warmup") : TEXT("Measure"),
+			FMath::Clamp(Progress, 0.0f, 100.0f)));
+	}
+
+	if (VisualBenchmarkResults[0] > 0.0)
+	{
+		OutLines.Add(FString::Printf(TEXT("Baseline x1: %.4f ms"), VisualBenchmarkResults[0]));
+		for (int32 ResultIndex = 1; ResultIndex < 3; ++ResultIndex)
+		{
+			if (VisualBenchmarkResults[ResultIndex] <= 0.0)
+			{
+				continue;
+			}
+			const int32 Interval = ResultIndex == 1 ? 2 : 4;
+			const double Reduction = (1.0 - VisualBenchmarkResults[ResultIndex] / VisualBenchmarkResults[0]) * 100.0;
+			const double Speedup = VisualBenchmarkResults[0] / VisualBenchmarkResults[ResultIndex];
+			OutLines.Add(FString::Printf(TEXT("Stagger x%d: %.4f ms  |  -%.1f%%  |  %.2fx"),
+				Interval, VisualBenchmarkResults[ResultIndex], Reduction, Speedup));
+		}
 	}
 }
 
