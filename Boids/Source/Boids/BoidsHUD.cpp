@@ -16,23 +16,41 @@ void ABoidsHUD::DrawHUD()
 
 	const int32 ElapsedSeconds = FMath::Max(0, FMath::FloorToInt(GetWorld()->GetTimeSeconds() - StartTimeSeconds));
 	const FString TimerText = FString::Printf(TEXT("Time  %02d:%02d"), ElapsedSeconds / 60, ElapsedSeconds % 60);
-	UFont* Font = GEngine->GetMediumFont();
+	UFont* TimerFont = GEngine->GetMediumFont();
+	UFont* PerformanceFont = GEngine->GetLargeFont();
+	auto DrawShadowedText = [this](UFont* Font, const FString& Text, float X, float Y, float Scale, const FColor& Color)
+	{
+		constexpr float ShadowOffset = 3.0f;
+		Canvas->SetDrawColor(FColor(0, 0, 0, 230));
+		Canvas->DrawText(Font, Text, X + ShadowOffset, Y + ShadowOffset, Scale, Scale, FFontRenderInfo());
+		Canvas->SetDrawColor(Color);
+		Canvas->DrawText(Font, Text, X, Y, Scale, Scale, FFontRenderInfo());
+	};
+
+	constexpr float TimerScale = 1.15f;
 	float TextWidth = 0.0f;
 	float TextHeight = 0.0f;
-	Canvas->StrLen(Font, TimerText, TextWidth, TextHeight);
-	Canvas->SetDrawColor(FColor::White);
-	Canvas->DrawText(Font, TimerText, Canvas->SizeX - TextWidth - 30.0f, 25.0f, 1.0f, 1.0f, FFontRenderInfo());
+	Canvas->StrLen(TimerFont, TimerText, TextWidth, TextHeight);
+	DrawShadowedText(TimerFont, TimerText,
+		Canvas->SizeX - TextWidth * TimerScale - 35.0f, 30.0f,
+		TimerScale, FColor(80, 255, 120));
 
 	for (TActorIterator<ABoidsManager3D> It(GetWorld()); It; ++It)
 	{
 		TArray<FString> PerformanceLines;
 		It->GetPerformanceOverlayLines(PerformanceLines);
-		float Y = 25.0f;
+		float Y = 30.0f;
 		for (int32 LineIndex = 0; LineIndex < PerformanceLines.Num(); ++LineIndex)
 		{
-			Canvas->SetDrawColor(LineIndex == 0 ? FColor(100, 220, 255) : FColor::White);
-			Canvas->DrawText(Font, PerformanceLines[LineIndex], 30.0f, Y, 0.85f, 0.85f, FFontRenderInfo());
-			Y += 24.0f;
+			const FString& Line = PerformanceLines[LineIndex];
+			FColor LineColor = FColor(90, 255, 120);
+			if (LineIndex == 0 || Line.StartsWith(TEXT("Baseline"))
+				|| (Line.StartsWith(TEXT("Testing")) && Line.Contains(TEXT("interval: 1"))))
+			{
+				LineColor = FColor(255, 70, 70);
+			}
+			DrawShadowedText(PerformanceFont, Line, 35.0f, Y, 0.95f, LineColor);
+			Y += 42.0f;
 		}
 		break;
 	}
