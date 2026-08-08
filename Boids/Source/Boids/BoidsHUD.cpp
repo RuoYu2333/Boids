@@ -18,15 +18,8 @@ void ABoidsHUD::DrawHUD()
 	const FString TimerText = FString::Printf(TEXT("Time  %02d:%02d"), ElapsedSeconds / 60, ElapsedSeconds % 60);
 	UFont* TimerFont = GEngine->GetMediumFont();
 	UFont* PerformanceFont = GEngine->GetLargeFont();
-	auto DrawShadowedText = [this](UFont* Font, const FString& Text, float X, float Y, float Scale, const FColor& Color)
+	auto DrawColoredText = [this](UFont* Font, const FString& Text, float X, float Y, float Scale, const FColor& Color)
 	{
-		// 阴影只向文字正下方延伸，多层透明度形成柔和的底部落影，不产生横向投影。
-		Canvas->SetDrawColor(FColor(0, 0, 0, 180));
-		Canvas->DrawText(Font, Text, X, Y + 2.0f, Scale, Scale, FFontRenderInfo());
-		Canvas->SetDrawColor(FColor(0, 0, 0, 110));
-		Canvas->DrawText(Font, Text, X, Y + 4.0f, Scale, Scale, FFontRenderInfo());
-		Canvas->SetDrawColor(FColor(0, 0, 0, 55));
-		Canvas->DrawText(Font, Text, X, Y + 6.0f, Scale, Scale, FFontRenderInfo());
 		Canvas->SetDrawColor(Color);
 		Canvas->DrawText(Font, Text, X, Y, Scale, Scale, FFontRenderInfo());
 	};
@@ -35,7 +28,7 @@ void ABoidsHUD::DrawHUD()
 	float TextWidth = 0.0f;
 	float TextHeight = 0.0f;
 	Canvas->StrLen(TimerFont, TimerText, TextWidth, TextHeight);
-	DrawShadowedText(TimerFont, TimerText,
+	DrawColoredText(TimerFont, TimerText,
 		Canvas->SizeX - TextWidth * TimerScale - 35.0f, 30.0f,
 		TimerScale, FColor(80, 255, 120));
 
@@ -53,7 +46,7 @@ void ABoidsHUD::DrawHUD()
 			{
 				LineColor = FColor(255, 70, 70);
 			}
-			DrawShadowedText(PerformanceFont, Line, 35.0f, Y, 0.95f, LineColor);
+			DrawColoredText(PerformanceFont, Line, 35.0f, Y, 0.95f, LineColor);
 			Y += 42.0f;
 		}
 		break;
