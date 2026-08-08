@@ -20,9 +20,13 @@ void ABoidsHUD::DrawHUD()
 	UFont* PerformanceFont = GEngine->GetLargeFont();
 	auto DrawShadowedText = [this](UFont* Font, const FString& Text, float X, float Y, float Scale, const FColor& Color)
 	{
-		constexpr float ShadowOffset = 3.0f;
-		Canvas->SetDrawColor(FColor(0, 0, 0, 230));
-		Canvas->DrawText(Font, Text, X + ShadowOffset, Y + ShadowOffset, Scale, Scale, FFontRenderInfo());
+		// 阴影只向文字正下方延伸，多层透明度形成柔和的底部落影，不产生横向投影。
+		Canvas->SetDrawColor(FColor(0, 0, 0, 180));
+		Canvas->DrawText(Font, Text, X, Y + 2.0f, Scale, Scale, FFontRenderInfo());
+		Canvas->SetDrawColor(FColor(0, 0, 0, 110));
+		Canvas->DrawText(Font, Text, X, Y + 4.0f, Scale, Scale, FFontRenderInfo());
+		Canvas->SetDrawColor(FColor(0, 0, 0, 55));
+		Canvas->DrawText(Font, Text, X, Y + 6.0f, Scale, Scale, FFontRenderInfo());
 		Canvas->SetDrawColor(Color);
 		Canvas->DrawText(Font, Text, X, Y, Scale, Scale, FFontRenderInfo());
 	};
