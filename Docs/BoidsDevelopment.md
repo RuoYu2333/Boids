@@ -572,3 +572,44 @@ FishRotation = FindBetweenNormals(LocalUp, Normalize(Velocity))
 这样朝向完全来自已有模拟状态，不参与力计算，也不会破坏固定步长的确定性。食物继续使用 Engine Sphere，方向指示器继续使用 Cone，水箱边框继续使用 Cube。
 
 本阶段有意使用静态 ISM，只替换几何外形。资源包虽然带骨骼动画，但逐实例播放骨骼动画需要 AnimToTexture、VAT 或其他 GPU 实例动画方案；在确定性能预算前不改成逐鱼 SkeletalMeshComponent。
+
+## 25. P2 性能优化复现：稳定分桶受力
+
+原资料 P2 4.9 的核心方案是“所有受力计算分帧、缓存公共结果、按设备分级”。当前版本先复现其中对 Boids CPU 开销最直接的一项：使用稳定 ID 把完整行为受力分配到多个固定步。
+
+```text
+ActiveBucket = ForceEvaluationStep % ForceUpdateInterval
+FishBucket   = StableId % ForceUpdateInterval
+```
+
+第一个固定步会为所有鱼预热加速度缓存。之后只有 `FishBucket == ActiveBucket` 的鱼重新计算 Separation、Alignment、Cohesion、种群避让、巡游、食物感知和软边界力；其他鱼复用上次加速度。速度/位置积分、转向限制、六面硬边界、鱼体碰撞和 ISM 提交仍以 60 Hz 执行，因此优化不会直接降低视觉更新频率。
+
+`ForceUpdateInterval` 默认值为 2：
+
+- `1`：基线，每个固定步为所有鱼重算受力。
+- `2`：高配分帧档，每步更新一半鱼的受力。
+- `4`：低配分帧档，每步更新四分之一鱼的受力。
+
+固定分桶不使用逐帧随机选择，因此同一 Seed、相同配置和相同步数仍可复现。加速度与寻食状态直接缓存于 `FBoidAgent3D`，逐鱼受力循环不创建临时结果数组。
+
+### 25.1 基准方法
+
+2026-08-08 使用源码版 UE 5.7.4、Development Editor、NullRHI，在同一台 Ryzen 5 7500F 机器上测试。每档均为 200 条鱼、固定 Seed、120 步预热、3000 个正式固定步，独立运行三次并取 `avg_step_ms` 中位数。UE 启动时间不计入测量区间。
+
+命令行基准入口只在传入 `-BoidsBenchmark` 时运行，例如：
+
+```text
+UnrealEditor-Cmd.exe Boids.uproject /Game/Maps/L_Boids3D -game -NullRHI -Unattended
+  -BoidsBenchmark -BoidsAgentCount=200 -BoidsForceInterval=2
+  -BoidsWarmupSteps=120 -BoidsBenchmarkSteps=3000
+```
+
+### 25.2 实测结果
+
+| ForceUpdateInterval | 三次平均步耗时（ms） | 中位数（ms） | 相对基线 | 加速比 |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | 0.459510 / 0.464108 / 0.468265 | 0.464108 | 基线 | 1.00× |
+| 2 | 0.354931 / 0.349416 / 0.349363 | 0.349416 | -24.7% | 1.33× |
+| 4 | 0.298884 / 0.297256 / 0.296976 | 0.297256 | -36.0% | 1.56× |
+
+课程中“约 200 条鱼从接近 10 ms 降至 3 ms 以下”是其移动端样例综合采用分帧、公共缓存、射线替换和表现 LOD 后的数据，不能直接套用到本项目。本轮只复现受力稳定分桶；空间哈希重建、硬碰撞和 ISM 提交仍每步执行，因此收益不会随间隔线性达到 2× 或 4×。后续应分别采样这些阶段，再决定是否缓存种群统计、降低碰撞频率或接入 VAT 表现分级。

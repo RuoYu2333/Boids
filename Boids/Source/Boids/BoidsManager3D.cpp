@@ -12,6 +12,9 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -172,8 +175,52 @@ void ABoidsManager3D::BeginPlay()
 		Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.1f, 1.0f, 0.1f));
 	}
 
+	int32 BenchmarkSteps = 0;
+	if (FParse::Param(FCommandLine::Get(), TEXT("BoidsBenchmark")))
+	{
+		int32 RequestedAgentCount = AgentCount;
+		int32 RequestedForceInterval = ForceUpdateInterval;
+		int32 RequestedWarmupSteps = 60;
+		FParse::Value(FCommandLine::Get(), TEXT("BoidsAgentCount="), RequestedAgentCount);
+		FParse::Value(FCommandLine::Get(), TEXT("BoidsForceInterval="), RequestedForceInterval);
+		FParse::Value(FCommandLine::Get(), TEXT("BoidsBenchmarkSteps="), BenchmarkSteps);
+		FParse::Value(FCommandLine::Get(), TEXT("BoidsWarmupSteps="), RequestedWarmupSteps);
+		AgentCount = FMath::Clamp(RequestedAgentCount, 1, 100000);
+		ForceUpdateInterval = FMath::Clamp(RequestedForceInterval, 1, 8);
+		BenchmarkSteps = FMath::Max(1, BenchmarkSteps);
+		bShowDirectionIndicators = false;
+		SpawnAgents();
+		RunCommandLineBenchmark(BenchmarkSteps, FMath::Max(0, RequestedWarmupSteps));
+		return;
+	}
+
 	SpawnAgents();
 	SpawnFreeCamera();
+}
+
+void ABoidsManager3D::RunCommandLineBenchmark(int32 BenchmarkSteps, int32 WarmupSteps)
+{
+	const float SafeStep = FMath::Max(0.001f, SimulationStep);
+	for (int32 Step = 0; Step < WarmupSteps; ++Step)
+	{
+		StepSimulation(SafeStep);
+	}
+
+	// 预热后恢复相同 Seed 的初始状态，三档基准都从相同数据开始。
+	ResetSimulation();
+	const double StartSeconds = FPlatformTime::Seconds();
+	for (int32 Step = 0; Step < BenchmarkSteps; ++Step)
+	{
+		StepSimulation(SafeStep);
+	}
+	const double ElapsedMilliseconds = (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
+	const double AverageStepMilliseconds = ElapsedMilliseconds / static_cast<double>(BenchmarkSteps);
+	UE_LOG(LogTemp, Display,
+		TEXT("BOIDS_BENCHMARK agents=%d interval=%d steps=%d total_ms=%.4f avg_step_ms=%.6f us_per_agent_step=%.4f"),
+		Agents.Num(), FMath::Clamp(ForceUpdateInterval, 1, 8), BenchmarkSteps,
+		ElapsedMilliseconds, AverageStepMilliseconds,
+		AverageStepMilliseconds * 1000.0 / FMath::Max(1, Agents.Num()));
+	FGenericPlatformMisc::RequestExit(false);
 }
 
 void ABoidsManager3D::Tick(float DeltaTime)
@@ -205,6 +252,7 @@ void ABoidsManager3D::ResetSimulation()
 {
 	TimeAccumulator = 0.0f;
 	SimulationTime = 0.0f;
+	ForceEvaluationStep = 0;
 	CurrentBehavior = EBoids3DBehaviorMode::Cruising;
 	FoodDropSequence = 0;
 	for (FBoidsFood3D& Food : Foods) Food.bActive = false;
@@ -263,6 +311,7 @@ void ABoidsManager3D::SpawnAgents()
 	DirectionInstances->ClearInstances();
 	Agents.Reset();
 	SpatialGrid.Reset();
+	ForceEvaluationStep = 0;
 
 	FRandomStream RandomStream(RandomSeed);
 	const float SafeMinScale = FMath::Min(MinAgentScale, MaxAgentScale);
@@ -367,10 +416,9 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 	}
 
 	BuildSpatialHash(CellSize);
-	TArray<FVector> Accelerations;
-	Accelerations.SetNumZeroed(Agents.Num());
-	TArray<bool> AgentSeekingFood;
-	AgentSeekingFood.Init(false, Agents.Num());
+	const int32 SafeForceInterval = FMath::Clamp(ForceUpdateInterval, 1, 8);
+	const int32 ActiveBucket = static_cast<int32>(
+		ForceEvaluationStep % static_cast<uint64>(SafeForceInterval));
 	FVector SpeciesCenters[5] = {};
 	int32 SpeciesCounts[5] = {};
 	for (const FBoidAgent3D& SpeciesAgent : Agents)
@@ -405,7 +453,12 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 
 	for (int32 AgentIndex = 0; AgentIndex < Agents.Num(); ++AgentIndex)
 	{
-		const FBoidAgent3D& Agent = Agents[AgentIndex];
+		FBoidAgent3D& Agent = Agents[AgentIndex];
+		// 第一个固定步预热全部缓存；之后用稳定 ID 分桶，避免随机抽样导致成本抖动和不可复现。
+		if (ForceEvaluationStep > 0 && Agent.StableId % SafeForceInterval != ActiveBucket)
+		{
+			continue;
+		}
 		const float SizeSpeedMultiplier = GetSizeSpeedMultiplier(Agent.Scale);
 		const float SizeAccelerationMultiplier = GetSizeAccelerationMultiplier(Agent.Scale);
 		const float AgentMaxSpeed = SafeMaxSimulationSpeed * SizeSpeedMultiplier;
@@ -554,7 +607,7 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 			}
 		}
 		const bool bCanSeeFood = SelectedFood != nullptr;
-		AgentSeekingFood[AgentIndex] = bCanSeeFood;
+		Agent.bSeekingFood = bCanSeeFood;
 		const FVector ToFood = bCanSeeFood ? SelectedFood->Position - Agent.Position : FVector::ZeroVector;
 		const float DistanceToFood = bCanSeeFood ? FMath::Sqrt(SelectedDistanceSquared) : 0.0f;
 
@@ -653,14 +706,14 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 		const float BoundaryPriority = bCanSeeFood ? 0.2f : 1.0f;
 		CombinedAcceleration += BoundaryDirection.GetClampedToMaxSize(1.0)
 			* BoundaryWeight * AgentMaxAcceleration * BoundaryPriority;
-		Accelerations[AgentIndex] = CombinedAcceleration.GetClampedToMaxSize(AgentMaxAcceleration);
+		Agent.Acceleration = CombinedAcceleration.GetClampedToMaxSize(AgentMaxAcceleration);
 		if (bShowNeighborhoodDebug && Agent.StableId == DebugAgentStableId)
 		{
 			const FVector WorldPosition = GetActorTransform().TransformPosition(Agent.Position);
 			DrawDebugSphere(GetWorld(), WorldPosition, SafeNeighborRadius, 24, FColor::Green, false, FixedDeltaTime * 1.5f);
 			DrawDebugSphere(GetWorld(), WorldPosition, SafeSeparationRadius, 20, FColor::Red, false, FixedDeltaTime * 1.5f);
 			DrawDebugLine(GetWorld(), WorldPosition,
-				GetActorTransform().TransformPosition(Agent.Position + Accelerations[AgentIndex]),
+				GetActorTransform().TransformPosition(Agent.Position + Agent.Acceleration),
 				FColor::Yellow, false, FixedDeltaTime * 1.5f, 0, 3.0f);
 		}
 	}
@@ -668,7 +721,6 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 	for (int32 AgentIndex = 0; AgentIndex < Agents.Num(); ++AgentIndex)
 	{
 		FBoidAgent3D& Agent = Agents[AgentIndex];
-		Agent.Acceleration = Accelerations[AgentIndex];
 		const FVector PreviousDirection = Agent.Velocity.GetSafeNormal();
 		Agent.Velocity += Agent.Acceleration * FixedDeltaTime;
 		const float UnclampedSpeed = Agent.Velocity.Length();
@@ -689,7 +741,7 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 		const float SizeSpeedMultiplier = GetSizeSpeedMultiplier(Agent.Scale);
 		const float AgentMaxSpeed = SafeMaxSimulationSpeed * SizeSpeedMultiplier;
 		const float AgentMinSpeed = SafeMinSimulationSpeed * SizeSpeedMultiplier;
-		const float StateMinSpeed = AgentSeekingFood[AgentIndex]
+		const float StateMinSpeed = Agent.bSeekingFood
 			? FMath::Min(AgentMinSpeed, FeedingArrivalSpeed * SizeSpeedMultiplier)
 			: AgentMinSpeed;
 		const float CurrentSpeed = Agent.Velocity.Length();
@@ -756,6 +808,7 @@ void ABoidsManager3D::StepSimulation(float FixedDeltaTime)
 	}
 
 	SimulationTime += FixedDeltaTime;
+	++ForceEvaluationStep;
 	UpdateInstances();
 }
 

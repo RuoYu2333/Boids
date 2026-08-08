@@ -24,6 +24,7 @@ struct FBoidAgent3D
 	FVector Position = FVector::ZeroVector;
 	FVector Velocity = FVector::ZeroVector;
 	FVector Acceleration = FVector::ZeroVector;
+	bool bSeekingFood = false;
 	float Scale = 1.0f;
 	int32 GroupId = 0;
 	int32 StableId = INDEX_NONE;
@@ -219,6 +220,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Simulation", meta = (ClampMin = "1", ClampMax = "16"))
 	int32 MaxSubsteps = 4;
 
+	// 受力计算按 StableId 固定分桶；1 表示每个固定步都重算，2/4 对应高低配分级。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Simulation", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 ForceUpdateInterval = 2;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boids3D|Rendering", meta = (ClampMin = "0"))
 	int32 InstanceStartCullDistance = 0;
 
@@ -283,10 +288,12 @@ private:
 	TArray<float> FishMeshScaleMultipliers;
 	float TimeAccumulator = 0.0f;
 	float SimulationTime = 0.0f;
+	uint64 ForceEvaluationStep = 0;
 	int32 FoodDropSequence = 0;
 	TWeakObjectPtr<ABoidsFreeCameraPawn> SpawnedFreeCamera;
 
 	void SpawnAgents();
+	void RunCommandLineBenchmark(int32 BenchmarkSteps, int32 WarmupSteps);
 	void StepSimulation(float FixedDeltaTime);
 	void BuildSpatialHash(float CellSize);
 	FIntVector GetCellCoordinate(const FVector& Position, float CellSize) const;
